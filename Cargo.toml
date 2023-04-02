@@ -1,8 +1,8 @@
 [package]
 name = "hunter"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 license = "GLWTPL"
 
 [dependencies]
-rand = "0.8.4"
+rand = "0.8.5"

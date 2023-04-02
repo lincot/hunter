@@ -21,9 +21,9 @@ const ELIXIR_OF_MIGHTY_AGILITY: bool = false;
 const ELIXIR_OF_ARMOR_PIERCING: bool = false;
 const ELIXIR_OF_MIGHTY_THOUGHTS: bool = false;
 const DELICATE_CARDINAL_RUBY: u16 = 9;
-const DELICATE_DRAGONS_EYE: u16 = 2;
+const DELICATE_DRAGONS_EYE: u16 = if ZOD { 1 } else { 2 };
 const FRACTURED_CARDINAL_RUBY: u16 = 7;
-const FRACTURED_DRAGONS_EYE: u16 = 1;
+const FRACTURED_DRAGONS_EYE: u16 = if ZOD { 2 } else { 1 };
 const DEADLY_AMETRINE: u16 = 2;
 const GLINTING_AMETRINE: u16 = 2;
 const RIGID_DRAGONS_EYE: u16 = 0;
@@ -44,7 +44,6 @@ const START_WITH_MARK: bool = true; // false if another hunter will
 const MARK_RAP: f64 = 500.;
 const PREPOT: bool = true;
 const POT: bool = PREPOT && true;
-const PET_SWAPPING: bool = true; // constant swapping
 const PRE_EXPLOSIVE: bool = false;
 const _USE_MELEE: bool = false; // didn't implement
 const ROTATION: [Ability; 6] = [Chimera, Aimed, Free, Free, Free, Free];
@@ -113,8 +112,14 @@ const SHARK_ATTACK: u8 = 1;
 const _WILD_HUNT: u8 = 0; // doesn't work
 const _RABID: u8 = 0; // didn't implement
 
+// Fal hc
 const RANGED_DAMAGE: f64 = (782.79 + 1070.79) / 2.;
-const RANGED_SPEED: f64 = 3.;
+// Fal nm
+// const RANGED_DAMAGE: f64 = (688.07 + 948.07) / 2.;
+// Zod
+// const RANGED_DAMAGE: f64 = (618.28 + 999.28) / 2.;
+const ZOD: bool = false;
+const RANGED_SPEED: f64 = if ZOD { 2.8 } else { 3. };
 const AMMO_DAMAGE: f64 = 91.5;
 const _MELEE_DAMAGE: f64 = (991. + 1487.) / 2.;
 
@@ -312,6 +317,7 @@ const MELEE: Item = Item {
         0
     },
 };
+// Fal hc
 const RANGED: Item = Item {
     agi: 62 + 4,
     int: 0,
@@ -326,6 +332,35 @@ const RANGED: Item = Item {
     haste: 0,
     hit: 0 + if matches!(SCOPE, AccuraScope) { 30 } else { 0 },
 };
+// Fal nm
+// const RANGED: Item = Item {
+//     agi: 54 - 20,
+//     int: 0,
+//     ap: 72,
+//     cri: 36
+//         + if matches!(SCOPE, HeartseekerScope) {
+//             40
+//         } else {
+//             0
+//         },
+//     arp: 36,
+//     haste: 0,
+//     hit: 0 + if matches!(SCOPE, AccuraScope) { 30 } else { 0 },
+// };
+// ZOD
+// const RANGED: Item = Item {
+//     agi: 22,
+//     int: 0,
+//     ap: 0,
+//     cri: 0 + if matches!(SCOPE, HeartseekerScope) {
+//         40
+//     } else {
+//         0
+//     },
+//     arp: 0,
+//     haste: 0,
+//     hit: 0 + if matches!(SCOPE, AccuraScope) { 30 } else { 0 },
+// };
 
 const AGI: f64 = (if RELENTLESS_ED { 21 } else { 0 }
     + if ELIXIR_OF_MIGHTY_AGILITY { 45 } else { 0 }
@@ -545,7 +580,7 @@ enum Race {
     Orc,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 enum Ability {
     Chimera,
     Aimed,
@@ -775,7 +810,7 @@ fn calculate_dps(debug: bool) -> f64 {
         }
         if furious_howl_cd == 0 {
             furious_howl_cd = 40 * 2;
-            furious_howl_time = (if PET_SWAPPING { 40 } else { 20 }) * 2;
+            furious_howl_time = 20 * 2;
             raw_rap += 320.;
             raw_pap += 320.;
         }
@@ -788,7 +823,7 @@ fn calculate_dps(debug: bool) -> f64 {
             }
         } else if call_of_the_wild_cd == 0 {
             call_of_the_wild_cd = 600 * 2;
-            call_of_the_wild_time = (if PET_SWAPPING { 60 } else { 20 }) * 2;
+            call_of_the_wild_time = 20 * 2;
             rap_mod *= 1.1;
             pap_mod *= 1.1;
         }
@@ -981,6 +1016,9 @@ fn calculate_dps(debug: bool) -> f64 {
                     t10_2_time = 10 * 2;
                     t *= 1.15;
                 }
+                if ZOD && chance(0.05, &mut rng) && not_miss(&mut rng) {
+                    hdamage += dmg * 0.5;
+                }
                 if chance(0.1, &mut rng) {
                     if improved_aspect_of_the_hawk_time == 0 {
                         ranged_speed /= 1.
@@ -998,24 +1036,26 @@ fn calculate_dps(debug: bool) -> f64 {
         if gcd == 0 {
             gcd = 3;
 
-            // bite
-            let dmg = PET * kc * (pap / 14. + 150.) * (1. + 0.01 * MARKED_FOR_DEATH as f64);
-            let cc = 0.05 - 0.048
-                + 0.03 * SPIDERS_BITE as f64
-                + if RAMPAGE { 0.05 } else { 0. }
-                + if TOTEM_OF_WRATH { 0.03 } else { 0. }
-                + if kc > 1. {
-                    0.1 * FOCUSED_FIRE as f64
-                } else {
-                    0.
-                };
-            pdamage += dmg * (cc * 2. + (1. - cc));
-            kc = (kc - 0.2).max(1.);
-            if chance(cc, &mut rng) {
-                if culling_the_herd_time == 0 {
-                    t *= 1. + 0.01 * CULLING_THE_HERD as f64;
+            {
+                // bite
+                let dmg = PET * kc * (pap / 14. + 150.) * (1. + 0.01 * MARKED_FOR_DEATH as f64);
+                let cc = 0.05 - 0.048
+                    + 0.03 * SPIDERS_BITE as f64
+                    + if RAMPAGE { 0.05 } else { 0. }
+                    + if TOTEM_OF_WRATH { 0.03 } else { 0. }
+                    + if kc > 1. {
+                        0.1 * FOCUSED_FIRE as f64
+                    } else {
+                        0.
+                    };
+                pdamage += dmg * (cc * 2. + (1. - cc));
+                kc = (kc - 0.2).max(1.);
+                if chance(cc, &mut rng) {
+                    if culling_the_herd_time == 0 {
+                        t *= 1. + 0.01 * CULLING_THE_HERD as f64;
+                    }
+                    culling_the_herd_time = 10 * 2;
                 }
-                culling_the_herd_time = 10 * 2;
             }
 
             let mut ability = Chimera;
@@ -1045,6 +1085,18 @@ fn calculate_dps(debug: bool) -> f64 {
                 }
             }
 
+            if ZOD
+                && [Serpent, Chimera, Aimed, Kill, Steady].contains(&ability)
+                && chance(0.05, &mut rng)
+                && not_miss(&mut rng)
+                && not_miss(&mut rng)
+            {
+                let cb = 0.01 * LETHAL_SHOTS as f64 + if RAMPAGE { 0.05 } else { 0. };
+                let base_dmg = RANGED_DAMAGE + (AMMO_DAMAGE + rap / 14.) * RANGED_SPEED;
+                let dmg = t * p * S * crit(cri, agi, cb, 0.) * base_dmg;
+                hdamage += dmg * 0.5;
+            }
+
             match ability {
                 Serpent => {
                     // Serpent
@@ -1069,6 +1121,14 @@ fn calculate_dps(debug: bool) -> f64 {
                                     * (RANGED_DAMAGE
                                         + (AMMO_DAMAGE + (rap + MARK_RAP) / 14.) * RANGED_SPEED);
                                 hdamage += t * p * S * crit(cri, agi, cb, db) * base_dmg;
+                                if ZOD && chance(0.05, &mut rng) && not_miss(&mut rng) {
+                                    let cb = 0.01 * LETHAL_SHOTS as f64
+                                        + if RAMPAGE { 0.05 } else { 0. };
+                                    let base_dmg =
+                                        RANGED_DAMAGE + (AMMO_DAMAGE + rap / 14.) * RANGED_SPEED;
+                                    let dmg = t * p * S * crit(cri, agi, cb, 0.) * base_dmg;
+                                    hdamage += dmg * 0.5;
+                                }
                             }
                         }
                         if not_miss(&mut rng) {
