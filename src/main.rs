@@ -20,10 +20,10 @@ const FLASK_OF_ENDLESS_RAGE: bool = true;
 const ELIXIR_OF_MIGHTY_AGILITY: bool = false;
 const ELIXIR_OF_ARMOR_PIERCING: bool = false;
 const ELIXIR_OF_MIGHTY_THOUGHTS: bool = false;
-const DELICATE_CARDINAL_RUBY: u16 = 9;
-const DELICATE_DRAGONS_EYE: u16 = if ZOD { 1 } else { 2 };
-const FRACTURED_CARDINAL_RUBY: u16 = 7;
-const FRACTURED_DRAGONS_EYE: u16 = if ZOD { 2 } else { 1 };
+const DELICATE_CARDINAL_RUBY: u16 = 8;
+const DELICATE_DRAGONS_EYE: u16 = 2;
+const FRACTURED_CARDINAL_RUBY: u16 = 8;
+const FRACTURED_DRAGONS_EYE: u16 = 1;
 const DEADLY_AMETRINE: u16 = 2;
 const GLINTING_AMETRINE: u16 = 2;
 const RIGID_DRAGONS_EYE: u16 = 0;
@@ -69,7 +69,7 @@ const EARTH_AND_MOON: bool = true;
 const IMPROVED_ICY_TALONS: bool = true;
 
 // debuffs
-const SUNDER_ARMOR: bool = true;
+const SUNDER_ARMOR: u8 = 5;
 const FAERIE_FIRE: bool = true;
 const SAVAGE_COMBAT: bool = true;
 const MANGLE: bool = true;
@@ -437,7 +437,6 @@ const CRI: f64 = (HEAD.cri
     + MELEE.cri
     + RANGED.cri
     + DEADLY_AMETRINE * 10) as _;
-// 1376.3 is the cap having war and dru debuffs
 const ARP: f64 = (if ELIXIR_OF_ARMOR_PIERCING { 45 } else { 0 }
     + if HEARTY_RHINO { 40 } else { 0 }
     + HEAD.arp
@@ -521,8 +520,13 @@ const PET_STR: f64 = 331. + if SPICED_MAMMOTH_TREATS { 30. } else { 0. };
 const BOSS_ARMOR: f64 = 10673.;
 const C1: f64 = 467.5 * 83. - 22167.5;
 const C2: f64 = 467.5 * 80. - 22167.5;
-const BOSS_ARMOR_DEBUFFED: f64 =
-    BOSS_ARMOR * (if SUNDER_ARMOR { 0.8 } else { 1. }) * (if FAERIE_FIRE { 0.95 } else { 1. });
+const BOSS_ARMOR_DEBUFFED: f64 = BOSS_ARMOR
+    * if SUNDER_ARMOR < 5 {
+        1. - 0.04 * SUNDER_ARMOR as f64
+    } else {
+        0.82
+    }
+    * if FAERIE_FIRE { 0.95 } else { 1. };
 const ARMOR_REDUCTION: f64 =
     (if ARP > 1399. { 1. } else { ARP / 1399.6 }) * (BOSS_ARMOR_DEBUFFED + C1) / 3.;
 const EFFECTIVE_ARMOR: f64 = BOSS_ARMOR_DEBUFFED - ARMOR_REDUCTION;
@@ -615,6 +619,11 @@ fn crit_chance(cri: f64, agi: f64, chance_bonus: f64) -> f64 {
         + chance_bonus
         + 0.01 * MASTER_MARKSMAN as f64
         + if TOTEM_OF_WRATH { 0.03 } else { 0. }
+        + if let (Troll, true) = (RACE, ZOD) {
+            0.01
+        } else {
+            0.
+        }
         - 0.048 // crit conversion
 }
 
