@@ -4,7 +4,7 @@ use crate::{Ability::*, BootsEnch::*, DbwProc::*, MeleeEnch::*, Potion::*, Race:
 use rand::{seq::SliceRandom, Rng};
 
 // encounter details
-const FIGHT_TIME: u64 = 100; // seconds
+const FIGHT_TIME: u64 = 210; // seconds
 const BELOW_20: f64 = 0.2; // ratio
 const HELLSCREAM_WARSONG: bool = true;
 
@@ -31,7 +31,7 @@ const NIGHTMARE_TEAR: bool = true;
 const RELENTLESS_ED: bool = true;
 const POTION: Potion = PotionOfSpeed;
 const BOOTS_ENCH: BootsEnch = Icewalker;
-const MELEE_ENCH: MeleeEnch = Massacre;
+const MELEE_ENCH: MeleeEnch = Berserking;
 const SCOPE: Scope = HeartseekerScope;
 const T10_2: bool = true;
 const T10_4: bool = true;
@@ -40,6 +40,7 @@ const DBW: bool = true;
 const WFS: bool = false;
 
 // playstyle
+const PET_SWAP: bool = true; // before pull
 const START_WITH_MARK: bool = true; // false if another hunter will
 const MARK_RAP: f64 = 500.;
 const PREPOT: bool = true;
@@ -302,6 +303,11 @@ const MELEE: Item = Item {
             110
         } else {
             0
+        }
+        + if matches!(MELEE_ENCH, Scourgebane) {
+            140
+        } else {
+            0
         },
     cri: 114
         + if matches!(MELEE_ENCH, Accuracy) {
@@ -556,6 +562,7 @@ const M: f64 = (5. + 0.9 * 3. + 0.8) / 9. * if EARTH_AND_MOON { 1.13 } else { 1.
 #[allow(dead_code)]
 enum MeleeEnch {
     Massacre,
+    Scourgebane, // ICC only
     Berserking,
     Accuracy,
 }
@@ -753,6 +760,8 @@ fn calculate_dps(debug: bool) -> f64 {
     let mut p = P * (if SAVAGE_COMBAT { 1.04 } else { 1. }); // physical damage modifier
     let mut t = 1.; // 2 T10 and culling the herd proc modifier
 
+    let mut first = true;
+
     while time <= FIGHT_TIME * 2 {
         if hysteria_time > 0 {
             hysteria_time -= 1;
@@ -818,7 +827,7 @@ fn calculate_dps(debug: bool) -> f64 {
             }
         }
         if furious_howl_cd == 0 {
-            furious_howl_cd = 40 * 2;
+            furious_howl_cd = if PET_SWAP && first { 20 * 2 } else { 40 * 2 };
             furious_howl_time = 20 * 2;
             raw_rap += 320.;
             raw_pap += 320.;
@@ -830,8 +839,13 @@ fn calculate_dps(debug: bool) -> f64 {
                 rap_mod /= 1.1;
                 pap_mod /= 1.1;
             }
-        } else if call_of_the_wild_cd == 0 {
-            call_of_the_wild_cd = 600 * 2;
+        }
+        if call_of_the_wild_cd == 0 {
+            call_of_the_wild_cd = if PET_SWAP && first {
+                20 * 2
+            } else {
+                5 * 60 * 2
+            };
             call_of_the_wild_time = 20 * 2;
             rap_mod *= 1.1;
             pap_mod *= 1.1;
@@ -1280,6 +1294,7 @@ fn calculate_dps(debug: bool) -> f64 {
             // println!("t: {}", t);
         }
         pet_done += 0.5 / pet_speed;
+        first = false;
     }
     let mut damage =
         hdamage * (1. + 0.01 * IMPROVED_TRACKING as f64) * (1. + 0.02 * FOCUSED_FIRE as f64)
