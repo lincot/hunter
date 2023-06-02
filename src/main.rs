@@ -2,6 +2,7 @@
 
 use crate::{Ability::*, BootsEnch::*, DbwProc::*, MeleeEnch::*, Potion::*, Race::*, Scope::*};
 use rand::{seq::SliceRandom, Rng};
+use rand_pcg::Pcg64;
 
 // encounter details
 const FIGHT_TIME: u64 = 210; // seconds
@@ -634,25 +635,23 @@ fn crit_chance(cri: f64, agi: f64, chance_bonus: f64) -> f64 {
         - 0.048 // crit conversion
 }
 
-fn chance(c: f64, rng: &mut impl Rng) -> bool {
-    rng.gen::<f64>() < c
-}
-
-fn not_miss(rng: &mut impl Rng) -> bool {
-    let c = 0.92 + 0.01 * (FOCUSED_AIM as f64) + HIT * 0.05 / 164.;
+fn chance(rng: &mut impl Rng, c: f64) -> bool {
     if c >= 1. {
         true
     } else {
-        chance(c, rng)
+        rng.gen_bool(c)
     }
 }
 
-fn calculate_dps(debug: bool) -> f64 {
+fn not_miss(rng: &mut impl Rng) -> bool {
+    chance(rng, 0.92 + 0.01 * FOCUSED_AIM as f64 + HIT * 0.05 / 164.)
+}
+
+fn calculate_dps(rng: &mut impl Rng, debug: bool) -> f64 {
     let mut time = 0u64; // halves of seconds just as *_cd and *_time
     let mut hdamage = 0f64;
     let mut pdamage = 0f64;
     // let mut autoshots = 0u64;
-    let mut rng = rand::thread_rng();
     let mut opening = OPENING.iter();
     let mut rotation = ROTATION.iter().cycle();
 
@@ -879,7 +878,7 @@ fn calculate_dps(debug: bool) -> f64 {
         } else if dbw_cd == 0 {
             dbw_cd = 105 * 2;
             dbw_time = 30 * 2;
-            dbw_proc = *[DbwAgi, DbwAp, DbwCri].choose(&mut rng).unwrap();
+            dbw_proc = *[DbwAgi, DbwAp, DbwCri].choose(rng).unwrap();
             match dbw_proc {
                 DbwAgi => raw_agi += 700.,
                 DbwAp => raw_rap += 1400.,
@@ -971,7 +970,7 @@ fn calculate_dps(debug: bool) -> f64 {
             serpent_time -= 1;
             if serpent_time % (3 * 2) == 0 {
                 hdamage += serpent_damage;
-                if T10_4 && chance(0.05, &mut rng) {
+                if T10_4 && chance(rng, 0.05) {
                     if t10_4_time == 0 {
                         rap_mod *= 1.2;
                     }
@@ -1010,7 +1009,7 @@ fn calculate_dps(debug: bool) -> f64 {
                         } else {
                             1.
                         }
-                        * (1. + (TRAP_MASTERY as f64) * 0.1)
+                        * (1. + TRAP_MASTERY as f64 * 0.1)
                         * base_dmg;
                 }
             }
@@ -1030,19 +1029,19 @@ fn calculate_dps(debug: bool) -> f64 {
         if ranged_done >= 1. {
             // autoshots += 1;
             ranged_done -= 1.;
-            if not_miss(&mut rng) {
+            if not_miss(rng) {
                 let cb = 0.01 * LETHAL_SHOTS as f64 + if RAMPAGE { 0.05 } else { 0. };
                 let base_dmg = RANGED_DAMAGE + (AMMO_DAMAGE + rap / 14.) * RANGED_SPEED;
                 let dmg = t * p * S * crit(cri, agi, cb, 0.) * base_dmg;
                 hdamage += dmg;
-                if T10_2 && chance(0.05, &mut rng) {
+                if T10_2 && chance(rng, 0.05) {
                     t10_2_time = 10 * 2;
                     t *= 1.15;
                 }
-                if ZOD && chance(0.05, &mut rng) && not_miss(&mut rng) {
+                if ZOD && chance(rng, 0.05) && not_miss(rng) {
                     hdamage += dmg * 0.5;
                 }
-                if chance(0.1, &mut rng) {
+                if chance(rng, 0.1) {
                     if improved_aspect_of_the_hawk_time == 0 {
                         ranged_speed /= 1.
                             + (if GLYPH_OF_THE_HAWK { 0.042 } else { 0.03 })
@@ -1050,7 +1049,7 @@ fn calculate_dps(debug: bool) -> f64 {
                     }
                     improved_aspect_of_the_hawk_time = 12 * 2;
                 }
-                if chance(0.04 * WILD_QUIVER as f64, &mut rng) {
+                if chance(rng, 0.04 * WILD_QUIVER as f64) {
                     hdamage += t * M * S * 0.8 * base_dmg;
                 }
             }
@@ -1073,7 +1072,7 @@ fn calculate_dps(debug: bool) -> f64 {
                     };
                 pdamage += dmg * (cc * 2. + (1. - cc));
                 kc = (kc - 0.2).max(1.);
-                if chance(cc, &mut rng) {
+                if chance(rng, cc) {
                     if culling_the_herd_time == 0 {
                         t *= 1. + 0.01 * CULLING_THE_HERD as f64;
                     }
@@ -1110,9 +1109,9 @@ fn calculate_dps(debug: bool) -> f64 {
 
             if ZOD
                 && [Serpent, Chimera, Aimed, Kill, Steady].contains(&ability)
-                && chance(0.05, &mut rng)
-                && not_miss(&mut rng)
-                && not_miss(&mut rng)
+                && chance(rng, 0.05)
+                && not_miss(rng)
+                && not_miss(rng)
             {
                 let cb = 0.01 * LETHAL_SHOTS as f64 + if RAMPAGE { 0.05 } else { 0. };
                 let base_dmg = RANGED_DAMAGE + (AMMO_DAMAGE + rap / 14.) * RANGED_SPEED;
@@ -1123,7 +1122,7 @@ fn calculate_dps(debug: bool) -> f64 {
             match ability {
                 Serpent => {
                     // Serpent
-                    if not_miss(&mut rng) {
+                    if not_miss(rng) {
                         serpent_damage = t * M * S * (0.04 * rap + 242.);
                         serpent_time = 2 * if GLYPH_OF_SERPENT_STING { 21 } else { 15 };
                     }
@@ -1135,7 +1134,7 @@ fn calculate_dps(debug: bool) -> f64 {
                         // Silencing (for simplicity it's only here)
                         if silencing_cd == 0 {
                             silencing_cd = 20 * 2;
-                            if not_miss(&mut rng) {
+                            if not_miss(rng) {
                                 let cb =
                                     0.01 * LETHAL_SHOTS as f64 + if RAMPAGE { 0.05 } else { 0. };
                                 let db = 0.06 * MORTAL_SHOTS as f64;
@@ -1144,7 +1143,7 @@ fn calculate_dps(debug: bool) -> f64 {
                                     * (RANGED_DAMAGE
                                         + (AMMO_DAMAGE + (rap + MARK_RAP) / 14.) * RANGED_SPEED);
                                 hdamage += t * p * S * crit(cri, agi, cb, db) * base_dmg;
-                                if ZOD && chance(0.05, &mut rng) && not_miss(&mut rng) {
+                                if ZOD && chance(rng, 0.05) && not_miss(rng) {
                                     let cb = 0.01 * LETHAL_SHOTS as f64
                                         + if RAMPAGE { 0.05 } else { 0. };
                                     let base_dmg =
@@ -1154,7 +1153,7 @@ fn calculate_dps(debug: bool) -> f64 {
                                 }
                             }
                         }
-                        if not_miss(&mut rng) {
+                        if not_miss(rng) {
                             // Chimera
                             // for some reason it takes only 400 of hunter's mark
                             let base_dmg = 1.25
@@ -1169,7 +1168,7 @@ fn calculate_dps(debug: bool) -> f64 {
                             let cb = 0.01 * LETHAL_SHOTS as f64;
                             let db = 0.06 * MORTAL_SHOTS as f64 + 0.02 * MARKED_FOR_DEATH as f64;
                             hdamage += crit(cri, agi, cb, db) * (dmg + sdmg);
-                            if chance(crit_chance(cri, agi, cb), &mut rng) {
+                            if chance(rng, crit_chance(cri, agi, cb)) {
                                 piercing_time = 8 * 2;
                                 piercing_damage = dmg * (1. + crit_dmg(db));
                             }
@@ -1183,7 +1182,7 @@ fn calculate_dps(debug: bool) -> f64 {
                     }
                 }
                 Aimed => {
-                    if not_miss(&mut rng) {
+                    if not_miss(rng) {
                         let base_dmg = RANGED_DAMAGE + (AMMO_DAMAGE + rap / 14.) * 2.8 + 408.;
                         let dmg = t
                             * p
@@ -1196,7 +1195,7 @@ fn calculate_dps(debug: bool) -> f64 {
                             + if RAMPAGE { 0.05 } else { 0. };
                         let db = 0.06 * MORTAL_SHOTS as f64 + 0.02 * MARKED_FOR_DEATH as f64;
                         hdamage += crit(cri, agi, cb, db) * dmg;
-                        if chance(crit_chance(cri, agi, cb), &mut rng) {
+                        if chance(rng, crit_chance(cri, agi, cb)) {
                             piercing_time = 8 * 2;
                             piercing_damage = dmg * (1. + crit_dmg(db));
                         }
@@ -1230,7 +1229,7 @@ fn calculate_dps(debug: bool) -> f64 {
                 }
                 Kill => {
                     kill_shot_cd = (if GLYPH_OF_KILL_SHOT { 9 } else { 15 }) * 2;
-                    if not_miss(&mut rng) {
+                    if not_miss(rng) {
                         let cb = 0.01 * LETHAL_SHOTS as f64 + if RAMPAGE { 0.05 } else { 0. };
                         let db = 0.06 * MORTAL_SHOTS as f64 + 0.02 * MARKED_FOR_DEATH as f64;
                         let base_dmg = 2. * RANGED_DAMAGE + rap * 0.4 + 650.;
@@ -1238,7 +1237,7 @@ fn calculate_dps(debug: bool) -> f64 {
                     }
                 }
                 Steady => {
-                    if not_miss(&mut rng) {
+                    if not_miss(rng) {
                         let base_dmg =
                             RANGED_DAMAGE + AMMO_DAMAGE * RANGED_SPEED + 0.1 * rap + 252.;
                         let dmg =
@@ -1248,11 +1247,11 @@ fn calculate_dps(debug: bool) -> f64 {
                             + if RAMPAGE { 0.05 } else { 0. };
                         let db = 0.06 * MORTAL_SHOTS as f64 + 0.02 * MARKED_FOR_DEATH as f64;
                         hdamage += crit(cri, agi, cb, db) * dmg;
-                        if chance(crit_chance(cri, agi, cb), &mut rng) {
+                        if chance(rng, crit_chance(cri, agi, cb)) {
                             piercing_time = 8 * 2;
                             piercing_damage = dmg * (1. + crit_dmg(db));
                         }
-                        if chance(0.05 * (IMPROVED_STEADY_SHOT as f64), &mut rng) {
+                        if chance(rng, 0.05 * IMPROVED_STEADY_SHOT as f64) {
                             improved_steady_shot = true;
                         }
                     }
@@ -1335,9 +1334,10 @@ fn main() {
         if JEWELCRAFTING { 3 } else { 0 }
     );
     let iterations = 1000000u64;
-    let mut total = calculate_dps(true) / iterations as f64;
+    let mut rng = Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
+    let mut total = calculate_dps(&mut rng, true) / iterations as f64;
     for _ in 1..iterations {
-        total += calculate_dps(false) / iterations as f64;
+        total += calculate_dps(&mut rng, false) / iterations as f64;
     }
     println!("\nDPS per {} iterations: {}", iterations, total);
 }
